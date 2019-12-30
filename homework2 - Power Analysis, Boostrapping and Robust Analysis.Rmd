@@ -1,0 +1,243 @@
+---
+title: "Homework 2"
+author: "Your Name Here"
+date: "11/13/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+## The Data
+
+The data that we are using is available in the "data" folder and is called: teamPerc.RData.
+
+## What Makes An Effective Leader?
+
+Why are some people seen as effective leaders and others are not? Are there any behaviors or characteristics that can help us quantify what an effective leader looks like? 
+
+The data that we are using comes from a large survey of employees and their direct manager (i.e., each leader provided self-ratings and their direct subordinates provided rating about the leader -- this is reflected by the `Rater` variable). We are most interested in subordinate ratings. This data contains individual items and the scale score for those items. The scale are hierarchical and are constructed as follows:
+
+The *forceful* scale contains the following subscales: takesCharge, declares, pushes
+
+The *enabling* scale contains the following subscales: empowers, listens, supports
+
+The *strategic* scale contains the following subscales: direction, growth, innovation
+
+The *operational* scale contains the following subscales: execution, efficiency, order
+
+There are also a number of demographic variables within this data (e.g., age, experience, gender, tenure). 
+
+The main goal is explain the *effect* variable. You can use individual items, scale subscores, and/or scale scores. 
+
+### Bronze
+
+After examining the variables within the given data, generate at least 3 testable hypotheses; these should be generated before any visual exploration. 
+
+Conduct an *a prior* power analysis and determine the sample size needed for the effect size you would expect to achieve -- be conservative in your estimates. Without previous knowledge or research, you will have to think before just picking a number here. Remember that you will need to use the $f^2$ value and it can calculated as:
+
+$$f^2 = \frac{R^2_{adjusted}}{1 - R^2_{adjusted}}$$
+
+After conducting your power analysis, use linear regression to test your hypotheses and produce appropriate visualizations.
+
+Discuss the results of your model, both in terms of the model performance and your hypotheses. 
+
+```{r}
+l <- load('teamPerc.RData')
+realdata <- eval(parse(text =l ))
+```
+
+Higher enabling will not lead to higher effect.
+
+Higher supports will not lead to higher effect.
+
+Higher innovation will not lead to higher effect.
+
+So I will put it together effect ~ enabling + supports + innovation. So, we have 3 variables, k = 4, u = 3,power = 0.8, we assume that model's R adjusted square is 0.1.
+
+```{r}
+radjustsquare = 0.1
+fsquare = radjustsquare/(1-radjustsquare)
+fsquare
+```
+
+```{r}
+library(pwr)
+
+pwr.f2.test(u = 3, v = NULL, f2 = 0.11111, power = .8)
+```
+So n = k + v = 98 + 4 = 102, so our sample size needed for calculate effect size is 102. Then we will test our hypotheses through linear regression.
+
+```{r}
+a = lm(effect~enabling+supports+innovation,data = realdata)
+summary(a)
+```
+
+Through linear regression analysis, we can refuse enabling, innovation will not lead to higher effect, but we may accept higher supports will not lead to higher effect because p-value for effect ~ support is high, maybe these three variables have highly relationship.Thus, we may check it separately.
+
+
+```{r}
+a = lm(effect~supports,data = realdata)
+summary(a)
+```
+From separately linear regression effect~supports, it shows that p-value is significant. So, we cannot decide whether to refuse the hypotheses of supports will lead to higher leadership. But we can conclude that, support have highly relationship with enabling and innovation.
+
+```{r}
+library(ggplot2)
+library(dplyr)
+```
+
+for effect~enabling
+```{r}
+ggplot(data = realdata,mapping = aes(x = enabling,y=effect))+
+  geom_point()+
+  geom_smooth()
+
+```
+
+```{r}
+ggplot(data = realdata,mapping = aes(x = supports,y=effect))+
+  geom_point()+
+  geom_smooth()
+
+```
+```{r}
+ggplot(data = realdata,mapping = aes(x = innovation,y=effect))+
+  geom_point()+
+  geom_smooth()
+
+```
+
+From the ggplot picture, we can find that when the values < 0, the effect number increases with the variables increase and variable = 0 reaches at the peak. The differences are when enabling values > 2, it increase again. For others, it decreases slightly with the variable number increases.
+From the plot, we can also demonstrate that these three variables has highly relationship.
+
+
+### Silver
+
+Conduct any form of resampling and discuss the output from your resampled results. How does the resultant distribution help to support your hypotheses?
+
+```{r}
+library(infer)
+modelVars <- realdata%>%
+  select(effect,enabling, supports, innovation)
+
+bootstrapping <- function(df) {
+  df <- df
+  
+  sampledRows <- sample(1:nrow(df), nrow(df), replace = TRUE)
+  
+  df <- df[sampledRows, ]
+  
+  bsMod <- lm(effect ~ enabling + supports + innovation, data = df)
+  
+  results <- broom::tidy(bsMod)
+  
+  return(results)
+}
+
+bootstrapping(modelVars)
+bsRep <- replicate(1000, bootstrapping(modelVars), simplify = FALSE)
+
+bsCombined <- do.call("rbind", bsRep)
+```
+```{r}
+bsCombined <- do.call("rbind", bsRep)
+meanEffect <- mean(bsCombined$statistic[bsCombined$term == "enabling"])
+
+ciUpper <- quantile(bsCombined$statistic[bsCombined$term == "enabling"], .975)
+
+ciLower <- quantile(bsCombined$statistic[bsCombined$term == "enabling"], .025)
+
+hist(bsCombined$statistic[bsCombined$term == "enabling"], col = "slategray1")
+
+
+
+abline(v = ciUpper, col = "sienna3", lwd = 2)
+
+abline(v = ciLower, col = "sienna3", lwd = 2)
+
+abline(v = meanEffect, col = "sienna3", lwd = 2)
+```
+
+From enabling part, this plot seems great. Because all of the samples' t value distribution are higher than 1.96, it can also demonstrate enabling will lead to higher leadership.
+
+```{r}
+meanEffect <- mean(bsCombined$statistic[bsCombined$term == "supports"])
+
+ciUpper <- quantile(bsCombined$statistic[bsCombined$term == "supports"], .975)
+
+ciLower <- quantile(bsCombined$statistic[bsCombined$term == "supports"], .025)
+
+hist(bsCombined$statistic[bsCombined$term == "supports"], col = "slategray1")
+
+abline(v = summary(a)$coefficients["supports","t value"], col = "goldenrod4", lwd = 2)
+
+abline(v = ciUpper, col = "sienna3", lwd = 2)
+
+abline(v = ciLower, col = "sienna3", lwd = 2)
+
+abline(v = meanEffect, col = "sienna3", lwd = 2)
+```
+
+From supports part, this plot seems not good. Because the median line is located below 0. That means t value doesn't seem good,even got negative cofficient. From this, we can demonstrate support cannot lead to higher leadership when it is applied to the real world.
+
+
+```{r}
+meanEffect <- mean(bsCombined$statistic[bsCombined$term == "innovation"])
+
+ciUpper <- quantile(bsCombined$statistic[bsCombined$term == "innovation"], .975)
+
+ciLower <- quantile(bsCombined$statistic[bsCombined$term == "innovation"], .025)
+
+hist(bsCombined$statistic[bsCombined$term == "innovation"], col = "slategray1")
+
+
+abline(v = ciUpper, col = "sienna3", lwd = 2)
+
+abline(v = ciLower, col = "sienna3", lwd = 2)
+
+abline(v = meanEffect, col = "sienna3", lwd = 2)
+```
+
+From innovation part, this plot seems great. Because all of the samples' t value distribution are higher than 1.96, it can also demonstrate innovation will lead to higher leadership.
+
+### Gold
+
+Consider any potential problems of your original regression model(s). Were there any observations exhibiting leverage? How sure are you about the standard errors? Identify one specific issue and revise your model strategy to help allieviate that issue.
+
+I choose the relationship between innovation and effect.
+```{r}
+b = lm(effect~innovation,data = realdata)
+summary(b)
+plot(b$fitted.values, b$residuals)
+```
+
+Compare to the ggplot and the regression analysis, the std.error is wrong, because its residuals are not random, it has a trend and also got a lot of outliers, which influence the std.error. So, we need to reduce it.
+```{r}
+vcov(b)
+```
+
+Then we use robust standard errors to solve this problems.
+
+
+
+```{r}
+library(sandwich)
+
+vcovHC(b)
+```
+```{r}
+lmtest::coeftest(b, vcov = vcovHC)
+```
+
+
+Compared to the previous one std errors(0.016890), this one is bigger(0.027). That propably means the cofficient of the innovation is precise. After revise it, it becomes spread.
+
+
+
+
+
+
+
+

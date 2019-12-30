@@ -1,0 +1,363 @@
+---
+title: "Mid Exam"
+author: "Ye Yuan"
+date: "12/3/2019"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    theme: darkly
+---
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# ● Section 1 - Mixed Model 
+
+## Instructions  
+
+Using the following data, produce a visualization with patient_days_admitted on the x-axis and dollar_spent_per_patient on the y-axis. After producing this visualization, explain what this relationship means and how this relationship might guide a decision.
+
+After looking at the bivariate relationship in the previous visualization, add department to the visualization as a grouping variable. Does this change your interpretation of the relationship or add any expanded understanding? If so, how? Does this visualization offer any additional explanatory power over the more simple visualization? Explain.
+
+
+## Solution
+
+```{r}
+sec1Link <- read.csv("https://www.nd.edu/~sberry5/data/visualizationData.csv")
+summary(sec1Link)
+```
+Relationship between patient_days_admitted and dollar_spent_per_patient
+```{r, echo = FALSE}
+library(ggplot2)
+names(sec1Link) = c("dollar_spent_per_patient", "patient_days_admitted", "department")
+
+sec1Link$department[sec1Link$department == "cancer"] = "cancer"
+
+sec1Link$department[sec1Link$department == "cardiac"] = "cardiac"
+
+sec1Link$department[sec1Link$department == "general"] = "general"
+
+ggplot(sec1Link, aes(patient_days_admitted, dollar_spent_per_patient)) + 
+  geom_point() +
+  geom_smooth(method = "lm") + 
+  theme_minimal()
+```
+```{r, echo = FALSE}
+ggplot(sec1Link, aes(patient_days_admitted, dollar_spent_per_patient)) + 
+  geom_point() +
+  geom_smooth() + 
+  theme_minimal()
+```
+
+Decision: From the lm trend, we know,the more patient days admitted, the more money they spent per patient. But actually, we can see when the patient_days_admitted =8 or 9,  the spent reaches the lowest. Also, during spent = 11~20, it increased most. And then, the slope decrease slightly. So, we can make decisions that if we want to cut the budget, the best length for patient to stay is 8 or 9 days.
+
+
+```{r, echo = FALSE}
+ggplot(sec1Link, aes(patient_days_admitted, dollar_spent_per_patient, color = department)) + 
+  geom_point() +
+  geom_smooth(method = "lm") + 
+  theme_minimal()
+```
+
+After we divided the department, we can find the cofficients of three lines are almost the same, but their intercept have large differences. Then we need to figure out which department acount for most.
+```{r, echo = FALSE}
+
+library(lme4)
+riMod <- lmer(dollar_spent_per_patient ~ patient_days_admitted + (1|department), data = sec1Link)
+summary(riMod)
+```
+```{r}
+library(merTools)
+
+plotREsim(REsim(riMod), labs = TRUE)
+```
+
+From summary table and effect ranges table, we can find t-value groups >1.96 and all the plots are black which means it is siginificant. And cancer department has positive effect to the intercept and account for the most for the intercept, but cardiac and general have negative effect to the intercept.
+
+
+# ● Section 2 - Genearl linear model
+
+## Instructions   
+
+Using the following data, formulate a hypothesis for training.sessions.attended.year's effect on customer.satisfaction.scores.year. Please clearly state the relationship that you would expect to find. Using an appropriate technique from the general linear model, test your hypothesis and report your findings -- interpretation of your model's coefficients is critical. Describe your rationale for any data processing (e.g., centering) that you might undertake.
+
+After reporting and interpreting your findings, conduct a post hoc power analysis to determine if you had a sufficient sample size to detect an effect. Discuss the results from your power analysis.
+
+## Solution
+
+```{r}
+sec2Link <- read.csv("https://www.nd.edu/~sberry5/data/glmData.csv")
+summary(sec2Link)
+
+```
+
+```{r}
+sec2Link <- read.csv("https://www.nd.edu/~sberry5/data/glmData.csv")
+summary(sec2Link)
+
+```
+
+H0: higher training sessions attended year will not lead to higher customer satisfaction scores
+```{r}
+seclinear = lm(customer.satisfaction.scores.year~training.sessions.attended.year, data =sec2Link )
+summary(seclinear)
+```
+```{r}
+library(ggplot2)
+ggplot(sec2Link, aes( training.sessions.attended.year,customer.satisfaction.scores.year)) + 
+  geom_point() +
+  geom_smooth(method = "lm") + 
+  theme_minimal()
+```
+
+From the summary and plot, we can reject the H0. The plot is doing so well to perform the linear relationship.And for the p-value, it shows that the relationship is significant. This plot means that even has no experience in attending the training sessions, they still got customer satisfaction scores 60. Then I want to see the mean perfermance of the plot, I will use centering to do data process.
+
+```{r}
+library(dplyr)
+centeredMod <- sec2Link %>% 
+  mutate(training.sessions.attended.year = training.sessions.attended.year - mean(training.sessions.attended.year, na.rm = TRUE)) %>% 
+  lm(customer.satisfaction.scores.year~training.sessions.attended.year, data = .)
+
+summary(centeredMod)
+```
+```{r}
+library(ggplot2)
+ggplot(sec2Link, aes( training.sessions.attended.year - mean(training.sessions.attended.year, na.rm = TRUE),customer.satisfaction.scores.year)) + 
+  geom_point() +
+  geom_smooth(method = "lm") + 
+  theme_minimal()
+```
+
+Through centering data process, cofficient doesn't change, we only change the meaning of intercept. Now the intercept means the mean of the customer satisfaction score is around 75. It's pretty well.
+
+
+Now, we do power analysis. From the current information, we know k = 2,u = 1, v = 527, sig.level=0.05  R2=0.4377, we need to calculate the power to know how well the regression performs.
+
+
+```{r}
+radjustsquare = 0.4377
+fsquare = radjustsquare/(1-radjustsquare)
+fsquare
+```
+```{r}
+library(pwr)
+
+pwr.f2.test(u = 1, v = 527, f2 = fsquare, power = NULL)
+```
+The power = 1, which is awesome! Because it represents a 1 to 0 trade between Type II and Type I errors, which means we got no type II error. And also that means we got enough sample size to test the effect of the model.
+
+# ● Section 3 - T-test 
+
+## Instructions   
+
+Consider the following A/B testing data. This data tracks a user's time on page (timeOnPage) and the UI design (design). In A/B testing, we are concerned with the difference between the two groups on the outcome. Select the appropriate technique from the general linear model and determine if any significant differences exist between the two competing page designs. Describe your rationale for any data processing that you might undertake.
+
+Discuss your results and indicate any actionable decision that comes from your analysis. Additionally, determine if your analyses were sufficiently powered.
+
+## Solution
+
+```{r}
+sec3Link <- read.csv("https://www.nd.edu/~sberry5/data/abData.csv")
+summary(sec3Link)
+a = lm(MinutesOnPage~PageConfiguration, data = sec3Link)
+summary(a)
+```
+For define the signigicant differences between two groups, t-test will be the best way. I can make a H0 first, group A and group B have the same mean.
+
+But before doing a t-test, I want to draw a boxplot to do some data exploration.
+
+```{r}
+
+ggplot(sec3Link, aes(PageConfiguration, MinutesOnPage)) + 
+  geom_boxplot(fill = "#ff5500") + 
+  theme_bw()
+```
+
+From the plot, we can easily find the mean of two groups has signficantly difference. The mean in group A is almost 6, and the mean in group B is 3. And Group A perferm much better than group B. The lowest of the group A is nearly the same as the highest in group B.
+
+Then, we need to use t-test statistical prove two groups has signficantly difference.
+```{r}
+ttest = t.test(sec3Link$MinutesOnPage ~ sec3Link$PageConfiguration,
+       alternative = "two.sided")
+ttest
+```
+From the t-test, we can easily reject the H0, which means they are significantly different. Then we need to do power analysis for that.
+
+we have sample size n = 1057/2, u1 = 5.974857 u2 = 3.027644 o = std, sig.level = 0.05, alternative = "two.sided"
+```{r}
+u1 = 5.974857 
+u2 = 3.027644
+o = sd(sec3Link$MinutesOnPage)
+d = (u1-u2)/o
+d
+```
+
+```{r}
+pwr.t.test(n=1059/2, d=d, sig.level=0.05, power= NULL, alternative="two.sided") 
+```
+From the ttest power analysis, we know that power = 1 means it represents a 1 to 0 trade between Type II and Type I errors, which means we got no type II error. And also that means we got enough sample size to test the effect of the t-test.
+
+Decision:So, then we can make the decision, Page A is much better than Page B.If I am a investor, I will probably be more interested in page A.
+
+# ● Section 4 - Annova
+
+## Instructions   
+
+Using the following data, determine if there are any differences in the daily net profit of three different store locations. Select the appropriate test from the general linear model and determine if any significant differences exist. Describe your rationale for any data processing that you might undertake. 
+
+Discuss your results.
+
+## Solution
+
+```{r}
+sec4Link <- read.csv("https://www.nd.edu/~sberry5/data/performanceData.csv")
+summary(sec4Link)
+```
+To determine whether the significant differences between groups, we need to use annova. 
+
+```{r}
+anovaTest = aov(daily_net_profit_thousand ~ as.factor(facility_location), data = sec4Link, projections = TRUE)
+summary(anovaTest)
+```
+From the annova test, we know p value is signficant, which means there exists difference between groups. But we need to figure out which groups are different?
+Then, I use Tukey’s Honestly Significant Difference test:
+```{r}
+TukeyHSD(anovaTest)
+```
+We can find 403 Barr are very different with 10 Maple and 710 Oakland.
+
+But, the performance in 710 Oakland is very close in 10 Maple.
+
+Then, we use plot to prove that.
+```{r}
+
+ggplot(sec4Link, aes(as.factor(facility_location), daily_net_profit_thousand)) + 
+  geom_boxplot(fill = "#ff5500") + 
+  theme_bw()
+```
+
+From the plot, we can make our decision. The biggest daily net profit is in 403 Barr, probably it is in the city centre which lead to higher profit. However, the daily net profit in 10 Maple and 710 Oakland are almost the same, maybe they are in close location, or they are in the suburb. So, we need to focus on these two stores, try to make some plans to improve their net profit.
+
+
+
+# ● Section 5 - Corrplot, Logistic Regression Model and interaction  
+
+## Instructions   
+
+Using the following data, determine what variables influence a franchise's ultimate outcome -- failure or success. Using any variables available to you, select the appropriate method and test your model. Discuss your results and describe your rationale for any data processing that you might undertake.
+
+## Solution
+
+```{r}
+sec5Link <- read.csv("https://www.nd.edu/~sberry5/data/outcomeData.csv")
+summary(sec5Link)
+```
+```{r}
+library(tidyverse)
+sec5Link %>%
+  keep(is.numeric) %>%
+  gather() %>%
+  ggplot() +
+  geom_histogram(mapping = aes(x=value,fill=key), color="black") +
+  facet_wrap(~ key, scales = "free") +
+  theme_minimal()
+```
+
+After we explore the data, I found that the y is a binomial variable needed to predict. Also, quartersWithHealthViolations is nominal. Others are numeric.
+Through the variable distribution, I found something interesting. Why dailynetprofit's plot are in two distribution which the centre is 4 and 9, and between 6-8 the count is zero. 
+So, next I try to use cofficient table and corrplot to find some relationship between variables with the outcomeClosedOpen.
+Also, I remove the store ID, which means nothing.
+
+
+
+```{r}
+library(DT); library(broom)
+
+carCor = cor(sec5Link[, 2:6])
+
+knitr::kable(round(carCor, 2))
+```
+
+
+Corrplot
+
+```{r, fig.height=5.5, fig.width=9, fig.align="center"}
+corrplot::corrplot.mixed(carCor, lower = "number", upper = "square", order = "hclust")
+```
+
+From the corrplot, we can see the dailynetprofitThousands is the biggest variable influence the outcome close or open. Also, the employeecount and people per sqmile will effect the outcome. quartersWithHealthViolations has little effect with close or open.
+
+Then, I want to use logistic regression model to test each variable.
+
+```{r, fig.height=5.5, fig.width=9, fig.align="center"}
+lmTest_employeeCount = glm(outcomeClosedOpen ~ employeeCount, data = sec5Link, family = binomial)
+
+summary(lmTest_employeeCount)
+ggplot(sec5Link) +
+  geom_count(aes(employeeCount, outcomeClosedOpen)) + 
+  theme_minimal()
+```
+
+From the summary and plot, we can see employee count can fit the log regression of outcome
+
+
+```{r, fig.height=5.5, fig.width=9, fig.align="center"}
+lmTest_dailyNetProfitThousands = glm(outcomeClosedOpen ~ dailyNetProfitThousands, data = sec5Link, family = binomial)
+
+summary(lmTest_dailyNetProfitThousands)
+ggplot(sec5Link) +
+  geom_count(aes(dailyNetProfitThousands, outcomeClosedOpen)) + 
+  theme_minimal()
+```
+
+From the summary and plot, we can see dailyNetProfitThousands cannot fit the log regression of the outcome. Because p-value = 0.998. The deep meaning behind this because if daily net profit is lower than 4.5, all the stores will close; if daily net profit is higher than 7.5, all the stores will open.
+
+
+
+```{r, fig.height=5.5, fig.width=9, fig.align="center"}
+lmTest_quartersWithHealthViolations	 = glm(outcomeClosedOpen ~ quartersWithHealthViolations	, data = sec5Link, family = binomial)
+
+summary(lmTest_quartersWithHealthViolations	)
+ggplot(sec5Link) +
+  geom_count(aes(quartersWithHealthViolations	, outcomeClosedOpen)) + 
+  theme_minimal()
+```
+
+From the summary and plot, we can see quartersWithHealthViolations cannot fit the log regression of the outcome. Because the plot don't have meaning of this.
+
+```{r, fig.height=5.5, fig.width=9, fig.align="center"}
+lmTest_peoplePerSqMile = glm(outcomeClosedOpen ~ peoplePerSqMile, data = sec5Link, family = binomial)
+
+summary(lmTest_peoplePerSqMile)
+ggplot(sec5Link) +
+  geom_count(aes(peoplePerSqMile, outcomeClosedOpen)) + 
+  theme_minimal()
+```
+
+From the summary and plot, we can see peoplePerSqMile can fit the log regression of the outcome.
+
+
+To sum up, we know that peoplePerSqMile and employeeCount are the variables influence a franchise's ultimate outcome -- failure or success.
+
+Then, We need to test their interaction.
+
+```{r, fig.height=5.5, fig.width=9, fig.align="center"}
+lmTest_peoplePerSqMile_employeeCount = glm(outcomeClosedOpen ~ peoplePerSqMile*employeeCount, data = sec5Link, family = binomial)
+
+summary(lmTest_peoplePerSqMile_employeeCount)
+ggplot(sec5Link) +
+  geom_count(aes(peoplePerSqMile*employeeCount, outcomeClosedOpen)) + 
+  theme_minimal()
+```
+
+From the summary, we can see peoplePerSqMile:employeeCount are not significant, which means they don't have interaction. 
+So, we can make the conclusion that peoplepersqmile and employee count are both independent variable which will affect the outcome.
+
+Decision: If I want to plan to open the store, I will focus on the area of the store (people per sq mile) and the number of employees, which will lead to the outcome.
+
+
+
+
+
+
